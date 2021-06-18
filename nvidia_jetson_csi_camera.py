@@ -2,6 +2,8 @@
 import cv2 as cv
 import threading
 import numpy as np
+import time
+
 
 def gstreamer_pipeline(
     sensor_id=0,
@@ -42,13 +44,18 @@ class NVIDIA_Jetson_CSI_Camera:
         self.thread = None
         self.frame = None
         self.lock = threading.Lock()
+        self.has_frame = False
         self.skipped_frames = 0
 
-    def open(self, pipeline):
-        self.capture = cv.VideoCapture(
-            pipeline, cv.CAP_GSTREAMER
-        )
-
+    def open(self, pipeline, use_pipeline = True):
+        if use_pipeline:
+            self.capture = cv.VideoCapture(
+                pipeline, cv.CAP_GSTREAMER
+            )
+        else:
+            self.capture = cv.VideoCapture(
+                pipeline
+            )
         if not self.capture.isOpened():
             print("Unable to open camera")
             print("Pipeline: " + pipeline)
@@ -62,7 +69,7 @@ class NVIDIA_Jetson_CSI_Camera:
             return None
 
         if self.capture != None:
-            self.running=True
+            self.running = True
             self.thread = threading.Thread(target=self.loop)
             self.thread.start()
         return self
@@ -84,42 +91,60 @@ class NVIDIA_Jetson_CSI_Camera:
             return None, None
         with self.lock:
             frame = self.frame.copy()
-            skipped = self.skipped_frames.copy()
+            skipped = self.skipped_frames
+            has_frame = self.has_frame
             self.skipped_frames = 0
-        return skipped, frame
+        return skipped, has_frame, frame
 
     def loop(self):
         while self.running:
-            try:
-                _, frame = self.capture.read()
-                with self.lock:
-                    self.frame = frame
-                    self.skipped_frames += 1
-            except RuntimeError:
-                print("Could not read image from camera")
-                self.release()
+            has_frame, frame = self.capture.read()
+            with self.lock:
+                self.has_frame = has_frame
+                self.frame = frame
+                self.skipped_frames += 1
+
 
 if __name__ == "__main__":
-    
+
     camera = NVIDIA_Jetson_CSI_Camera()
-    camera.open(
-        gstreamer_pipeline(
-            sensor_id=0,
-            sensor_mode=4,
-            flip_method=2,
-            display_height=540,
-            display_width=960,
-        )
-    )
+    # camera.open(
+    #     gstreamer_pipeline(
+    #         sensor_id=0,
+    #         sensor_mode=4,
+    #         flip_method=2,
+    #         display_height=540,
+    #         display_width=960,
+    #     )
+    # )
+
+    camera.open(0, False)
+
+    cv.namedWindow("Camera", cv.WINDOW_AUTOSIZE)
 
     camera.start()
 
-    while True:
+    cTime = 0
+    pTime = 0
 
-        _ , img = camera.read()
-        cv.imshow("camera", img)
+    while cv.getWindowProperty("Camera", 0) >= 0:
 
-        if cv.waitKey(30) & 0xFF == 'q':
+        skipped, new, img = camera.read()
+
+        if new:
+
+            cTime = time.time()
+            fps = 1/(cTime-pTime)
+            pTime = cTime
+
+            img = cv.putText(img, "Skip: "+str(skipped), (10,40), cv.FONT_HERSHEY_SIMPLEX,
+                       1, (255, 0, 0), 2, cv.LINE_AA)
+
+            img = cv.putText(img, "FPS: "+str(fps), (10,80), cv.FONT_HERSHEY_SIMPLEX,
+                       1, (255, 0, 0), 2, cv.LINE_AA)
+            cv.imshow("Camera", img)
+
+        if cv.waitKey(1) & 0xFF == 'q':
             break
 
     camera.stop()
