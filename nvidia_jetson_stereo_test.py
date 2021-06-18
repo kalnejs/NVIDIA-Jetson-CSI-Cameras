@@ -1,7 +1,7 @@
 #!/usr/bin/python
 from  nvidia_jetson_csi_camera import NVIDIA_CSI_Camera as Camera
 import numpy as np
-
+import cv2 as cv
 
 if __name__ == "__main__":
     camera_left = Camera()
