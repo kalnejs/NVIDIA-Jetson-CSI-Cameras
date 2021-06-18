@@ -59,7 +59,7 @@ class NVIDIA_CSI_Camera:
             )
         if not self.capture.isOpened():
             print("Unable to open camera")
-            print("Pipeline: " + pipeline)
+            print("Pipeline: " + str(pipeline))
             exit(1)
 
         _, self.frame = self.capture.read()
